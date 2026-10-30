@@ -1,0 +1,78 @@
+bot.py
+
+import os
+import logging
+from telegram import Update
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from moviepy.editor import VideoFileClip, ImageClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# --- НАЛАШТУВАННЯ ---
+TOKEN = "9151899647: AAE9URxQYAVukSeIGeFsmi
+07KJQxCXgg70c"
+# Вкажи точну назву свого файлу банера разом із розширенням (.png чи .jpg)
+BANNER_FILENAME = "Musor Drop Uprade TT-Banner.png" 
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привіт! Надішли мені відео (до 1 хв), і я вставлю банер посередині.")
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    await message.reply_text("Обробляю відео, зачекай кілька секунд...")
+
+    input_video = "input.mp4"
+    output_video = "output.mp4"
+
+    video_file = await message.video.get_file()
+    await video_file.download_to_drive(input_video)
+
+    try:
+        video = VideoFileClip(input_video)
+        half_time = video.duration / 2
+
+        part1 = video.subclip(0, half_time)
+        part2 = video.subclip(half_time, video.duration)
+
+        banner_duration = 5.0
+        bg_clip = ColorClip(size=video.size, color=(0, 0, 0), duration=banner_duration)
+        
+        # Завантаження банера з твоєї назви файлу
+        banner = ImageClip(BANNER_FILENAME).set_duration(banner_duration)
+        banner = banner.resize(width=video.w * 0.5)  # 50% ширини
+        banner = banner.set_position(('center', 'center'))
+
+        banner_scene = CompositeVideoClip([bg_clip, banner])
+        final_clip = concatenate_videoclips([part1, banner_scene, part2])
+
+        # Збереження відео з кодеком H.265
+        final_clip.write_videofile(
+            output_video, 
+            codec='libx265', 
+            audio_codec='aac', 
+            fps=video.fps
+        )
+
+        await message.reply_video(video=open(output_video, 'rb'))
+
+        video.close()
+        final_clip.close()
+
+    except Exception as e:
+        await message.reply_text(f"Сталася помилка під час обробки: {e}")
+
+    finally:
+        if os.path.exists(input_video): os.remove(input_video)
+        if os.path.exists(output_video): os.remove(output_video)
+
+def main():
+    application = ApplicationBuilder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.VIDEO, handle_video))
+    
+    print("Бот запущено і чекає на відео...")
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
+
